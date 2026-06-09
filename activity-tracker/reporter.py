@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a daily bullet-point activity report using Claude."""
+"""Generate a daily bullet-point activity report using ByteDance Seed 2."""
 
 import json
 import os
@@ -63,12 +63,18 @@ def format_timeline(entries: list) -> str:
     return "\n".join(lines)
 
 
-# ── Claude API call ────────────────────────────────────────────────────────────
+# ── ByteDance Seed 2 API call ──────────────────────────────────────────────────
 
-def call_claude(timeline: str, day: date) -> str:
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+def call_seed(timeline: str, day: date) -> str:
+    api_key = os.environ.get("BYTEDANCE_API_KEY", "")
     if not api_key:
-        sys.exit("Error: ANTHROPIC_API_KEY not set in activity-tracker/.env")
+        sys.exit("Error: BYTEDANCE_API_KEY not set in activity-tracker/.env")
+
+    model = os.environ.get("BYTEDANCE_MODEL", "seed-2-0-mini-260428")
+    endpoint = os.environ.get(
+        "BYTEDANCE_API_URL",
+        "https://ark.ap-southeast.bytepluses.com/api/v3/responses",
+    )
 
     prompt = f"""Here is my computer activity log for {day.strftime('%A, %B %d, %Y')}:
 
@@ -86,23 +92,35 @@ Write a concise daily summary as bullet points. Guidelines:
 Output only the bullet list, nothing else."""
 
     body = json.dumps({
-        "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 1024,
-        "messages": [{"role": "user", "content": prompt}],
+        "model": model,
+        "stream": False,
+        "input": [
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": prompt}],
+            }
+        ],
     }).encode()
 
     req = urllib.request.Request(
-        "https://api.anthropic.com/v1/messages",
+        endpoint,
         data=body,
         headers={
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=60) as resp:
         data = json.loads(resp.read())
-    return data["content"][0]["text"].strip()
+
+    # Responses API: output[].content[].text
+    for item in data.get("output", []):
+        if item.get("type") == "message":
+            for part in item.get("content", []):
+                if part.get("type") == "output_text":
+                    return part["text"].strip()
+
+    raise ValueError(f"Unexpected response shape: {json.dumps(data)[:300]}")
 
 
 # ── Web sync ───────────────────────────────────────────────────────────────────
@@ -140,9 +158,10 @@ def generate(day: date):
 
     timeline = format_timeline(entries)
     total_mins = len(entries)
-    print(f"Generating report for {day}  ({total_mins} minutes tracked)...")
+    model = os.environ.get("BYTEDANCE_MODEL", "seed-2-0-mini-260428")
+    print(f"Generating report for {day}  ({total_mins} minutes tracked)  [{model}]...")
 
-    bullets = call_claude(timeline, day)
+    bullets = call_seed(timeline, day)
 
     header = f"# {day.strftime('%A, %B %d, %Y')}\n\n"
     markdown = header + bullets + "\n"
