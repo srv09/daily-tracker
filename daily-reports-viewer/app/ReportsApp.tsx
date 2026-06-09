@@ -77,8 +77,66 @@ function ReportCard({ iso, onOpen }: { iso: string; onOpen: (iso: string) => voi
   );
 }
 
+type Task = { task: string; status: string };
+
+function parseContent(content: string): { tasks: Task[]; date: string } | null {
+  try {
+    const raw = content.trim();
+    const parsed = JSON.parse(raw);
+    if (parsed.tasks && Array.isArray(parsed.tasks)) return parsed;
+    if (Array.isArray(parsed)) return { tasks: parsed, date: "" };
+  } catch {}
+  return null;
+}
+
+const COPY_SIGNATURE = "Sourav's daily task automation";
+
+function buildCopyText(weekday: string, date: string, tasks: Task[]): string {
+  const lines = tasks.map((t) =>
+    `${t.status === "Done" ? "✅" : "🔄"} ${t.task} — ${t.status}`
+  );
+  return `📅 Daily Update — ${weekday}, ${date}\n\n${lines.join("\n")}\n\n— ${COPY_SIGNATURE}`;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const done = status === "Done";
+  return (
+    <span style={{
+      fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99,
+      background: done ? "rgba(212,245,66,0.12)" : "rgba(251,191,36,0.12)",
+      color: done ? ACCENT : "#fbbf24",
+      border: `1px solid ${done ? "rgba(212,245,66,0.25)" : "rgba(251,191,36,0.25)"}`,
+      whiteSpace: "nowrap" as const,
+    }}>
+      {status}
+    </span>
+  );
+}
+
+function TaskTable({ tasks }: { tasks: Task[] }) {
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <thead>
+        <tr style={{ borderBottom: "1px solid #27272a" }}>
+          <th style={{ textAlign: "left", padding: "8px 16px 8px 0", fontSize: 11, fontWeight: 600, color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Task</th>
+          <th style={{ textAlign: "right", padding: "8px 0", fontSize: 11, fontWeight: 600, color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {tasks.map((t, i) => (
+          <tr key={i} style={{ borderBottom: "1px solid #1f1f22" }}>
+            <td style={{ padding: "12px 16px 12px 0", fontSize: 13, color: "#e4e4e7" }}>{t.task}</td>
+            <td style={{ padding: "12px 0", textAlign: "right" }}><StatusBadge status={t.status} /></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function ReportModal({ iso, content, onClose }: { iso: string; content: string; onClose: () => void }) {
   const { weekday, date } = formatDate(iso);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -86,7 +144,29 @@ function ReportModal({ iso, content, onClose }: { iso: string; content: string; 
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const parsed = parseContent(content);
   const body = content.replace(/^#[^\n]*\n+/, "").trim();
+
+  const handleCopy = () => {
+    const text = parsed ? buildCopyText(weekday, date, parsed.tasks) : body;
+    const finish = () => { setCopied(true); setTimeout(() => setCopied(false), 2000); };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(finish).catch(() => fallbackCopy(text, finish));
+    } else {
+      fallbackCopy(text, finish);
+    }
+  };
+
+  const fallbackCopy = (text: string, done: () => void) => {
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.style.cssText = "position:fixed;opacity:0;top:0;left:0";
+    document.body.appendChild(el);
+    el.focus();
+    el.select();
+    try { document.execCommand("copy"); done(); } catch {}
+    document.body.removeChild(el);
+  };
 
   return (
     <div
@@ -114,24 +194,60 @@ function ReportModal({ iso, content, onClose }: { iso: string; content: string; 
             </div>
             <span style={{ fontSize: 12, color: "#71717a" }}>{date}</span>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center",
-              borderRadius: 8, border: "none", background: "transparent", color: "#71717a",
-              cursor: "pointer",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "#27272a"; e.currentTarget.style.color = "#f4f4f5"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#71717a"; }}
-          >
-            <svg width={16} height={16} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={handleCopy}
+              title="Copy to clipboard"
+              style={{
+                height: 32, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                padding: copied ? "0 12px" : "0 10px",
+                borderRadius: 8, border: `1px solid ${copied ? ACCENT : "#3f3f46"}`,
+                background: copied ? `${ACCENT}18` : "transparent",
+                color: copied ? ACCENT : "#71717a",
+                cursor: "pointer", transition: "all 0.15s", fontSize: 12, fontWeight: 500,
+              }}
+              onMouseEnter={(e) => { if (!copied) { e.currentTarget.style.background = "#27272a"; e.currentTarget.style.color = "#f4f4f5"; e.currentTarget.style.borderColor = "#52525b"; } }}
+              onMouseLeave={(e) => { if (!copied) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#71717a"; e.currentTarget.style.borderColor = "#3f3f46"; } }}
+            >
+              {copied ? (
+                <>
+                  <svg width={13} height={13} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Copied!
+                </>
+              ) : (
+                <svg width={15} height={15} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <rect x="9" y="9" width="13" height="13" rx="2" strokeWidth={2} />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                </svg>
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              style={{
+                width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center",
+                borderRadius: 8, border: "none", background: "transparent", color: "#71717a",
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#27272a"; e.currentTarget.style.color = "#f4f4f5"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#71717a"; }}
+            >
+              <svg width={16} height={16} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
-        <div className="report-body" style={{ overflowY: "auto", padding: "20px 24px" }}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
+        <div style={{ overflowY: "auto", padding: "20px 24px" }}>
+          {parsed ? (
+            <TaskTable tasks={parsed.tasks} />
+          ) : (
+            <div className="report-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
+            </div>
+          )}
         </div>
       </div>
     </div>

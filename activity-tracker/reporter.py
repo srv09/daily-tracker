@@ -80,16 +80,25 @@ def call_seed(timeline: str, day: date) -> str:
 
 {timeline}
 
-Write a concise daily summary as bullet points. Guidelines:
-- Group related work together (multiple windows/tabs for the same task → one bullet)
-- Focus on WHAT I accomplished, not which app I used
-- Use specific names from window titles (project names, document names, website names)
-- Write in past tense ("Worked on...", "Reviewed...", "Built...")
-- Skip idle/lock screen / trivial Finder browsing
-- Maximum 12 bullets, minimum 3
-- No intro sentence, no outro — just the bullet list
+Output ONLY a valid JSON array — no markdown, no explanation, nothing else.
 
-Output only the bullet list, nothing else."""
+Each item has:
+- "task": what was worked on (specific name from window titles where possible)
+- "status": "Done" if the task seems completed, "In-progress" if it's an ongoing project
+
+Rules:
+- Group related work (multiple windows/tabs for the same project = one item)
+- Focus on WHAT was done, not which app was used
+- Past tense task names: "API testing and validation", "Revenue tracking", "Team sync"
+- Skip idle time, lock screen, trivial Finder browsing
+- 3 to 10 items maximum
+
+Example output:
+[
+  {{"task": "API testing and validation", "status": "Done"}},
+  {{"task": "Playground stability improvements", "status": "In-progress"}},
+  {{"task": "Team sync", "status": "Done"}}
+]"""
 
     body = json.dumps({
         "model": model,
@@ -161,19 +170,34 @@ def generate(day: date):
     model = os.environ.get("BYTEDANCE_MODEL", "seed-2-0-mini-260428")
     print(f"Generating report for {day}  ({total_mins} minutes tracked)  [{model}]...")
 
-    bullets = call_seed(timeline, day)
+    raw = call_seed(timeline, day)
 
-    header = f"# {day.strftime('%A, %B %d, %Y')}\n\n"
-    markdown = header + bullets + "\n"
+    # Parse JSON; fall back to raw text if the model didn't comply
+    try:
+        tasks = json.loads(raw)
+        assert isinstance(tasks, list)
+    except Exception:
+        tasks = None
+
+    if tasks:
+        content = json.dumps({"date": day.isoformat(), "tasks": tasks}, ensure_ascii=False)
+    else:
+        content = raw
 
     report_path = REPORTS_DIR / f"{day.isoformat()}.md"
-    report_path.write_text(markdown)
+    report_path.write_text(content + "\n")
     print(f"Saved → {report_path}")
 
-    sync_to_web(day, markdown)
+    sync_to_web(day, content)
 
     print()
-    print(markdown)
+    if tasks:
+        print(f"📅 {day.strftime('%A, %B %d, %Y')}\n")
+        for t in tasks:
+            status_icon = "✅" if t.get("status") == "Done" else "🔄"
+            print(f"  {status_icon}  {t['task']}  [{t.get('status', '')}]")
+    else:
+        print(content)
 
 
 def main():
