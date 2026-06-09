@@ -6,13 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: daily-reports-viewer
-
     steps:
       - uses: actions/checkout@v4
 
@@ -22,17 +22,23 @@ jobs:
           cache: 'npm'
           cache-dependency-path: daily-reports-viewer/package-lock.json
 
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
       - name: Install dependencies
+        working-directory: daily-reports-viewer
         run: npm ci
 
       - name: Build
+        working-directory: daily-reports-viewer
         run: npm run build
 
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: ${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
-          working-directory: ./daily-reports-viewer
+      - name: Deploy (preview)
+        if: github.ref != 'refs/heads/main'
+        working-directory: daily-reports-viewer
+        run: vercel deploy --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy (production)
+        if: github.ref == 'refs/heads/main'
+        working-directory: daily-reports-viewer
+        run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
