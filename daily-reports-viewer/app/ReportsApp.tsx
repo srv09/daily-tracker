@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 const ACCENT = "#d4f542";
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function formatDate(iso: string) {
   const d = new Date(iso + "T12:00:00");
@@ -25,64 +26,122 @@ function isYesterday(iso: string) {
 
 function DateBadge({ iso }: { iso: string }) {
   if (isToday(iso))
-    return (
-      <span style={{ background: ACCENT, color: "#09090b", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99 }}>
-        Today
-      </span>
-    );
+    return <span style={{ background: ACCENT, color: "#09090b", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99 }}>Today</span>;
   if (isYesterday(iso))
-    return (
-      <span style={{ background: "#27272a", color: "#a1a1aa", fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 99 }}>
-        Yesterday
-      </span>
-    );
+    return <span style={{ background: "#27272a", color: "#a1a1aa", fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 99 }}>Yesterday</span>;
   return null;
 }
 
-function ReportCard({ iso, onOpen }: { iso: string; onOpen: (iso: string) => void }) {
-  const { weekday, date } = formatDate(iso);
-  const [hover, setHover] = useState(false);
+// ── Calendar ──────────────────────────────────────────────────────────────────
+
+function CalendarView({ dates, onOpen }: { dates: string[]; onOpen: (iso: string) => void }) {
+  const today = new Date();
+  const [view, setView] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+
+  const year = view.getFullYear();
+  const month = view.getMonth();
+  const reportSet = new Set(dates);
+  const todayIso = today.toISOString().slice(0, 10);
+
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells: ({ day: number; iso: string; hasReport: boolean } | null)[] = [
+    ...Array(firstDow).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => {
+      const d = i + 1;
+      const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      return { day: d, iso, hasReport: reportSet.has(iso) };
+    }),
+  ];
+
+  const monthLabel = view.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  const navBtn = (dir: number) => () => setView(new Date(year, month + dir, 1));
 
   return (
-    <button
-      onClick={() => onOpen(iso)}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        width: "100%",
-        textAlign: "left",
-        background: hover ? "#1f1f22" : "#18181b",
-        border: `1px solid ${hover ? "#3f3f46" : "#27272a"}`,
-        borderRadius: 12,
-        padding: "16px 20px",
-        cursor: "pointer",
-        transition: "all 0.15s",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-      }}
-    >
-      <div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: "#f4f4f5" }}>{weekday}</span>
-          <DateBadge iso={iso} />
-        </div>
-        <span style={{ fontSize: 12, color: "#71717a" }}>{date}</span>
+    <div style={{ maxWidth: 480, margin: "0 auto", padding: "24px 16px" }}>
+      {/* Month nav */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+        <button onClick={navBtn(-1)} style={navStyle}>
+          <svg width={16} height={16} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <span style={{ fontSize: 15, fontWeight: 700, color: "#f4f4f5" }}>{monthLabel}</span>
+        <button onClick={navBtn(1)} style={navStyle}>
+          <svg width={16} height={16} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
       </div>
-      <svg width={16} height={16} fill="none" stroke={hover ? "#a1a1aa" : "#52525b"} viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-      </svg>
-    </button>
+
+      {/* Day headers */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", marginBottom: 8 }}>
+        {DAYS.map((d) => (
+          <div key={d} style={{ textAlign: "center", fontSize: 11, fontWeight: 600, color: "#52525b", textTransform: "uppercase", letterSpacing: "0.05em", padding: "4px 0" }}>
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+        {cells.map((cell, i) => {
+          if (!cell) return <div key={`e-${i}`} />;
+          const isT = cell.iso === todayIso;
+          return (
+            <button
+              key={cell.iso}
+              onClick={() => cell.hasReport && onOpen(cell.iso)}
+              disabled={!cell.hasReport}
+              style={{
+                aspectRatio: "1",
+                borderRadius: 10,
+                border: isT ? `1.5px solid ${ACCENT}` : "1.5px solid transparent",
+                background: cell.hasReport ? "#1c1c1f" : "transparent",
+                color: cell.hasReport ? "#f4f4f5" : "#3f3f46",
+                cursor: cell.hasReport ? "pointer" : "default",
+                display: "flex", flexDirection: "column",
+                alignItems: "center", justifyContent: "center", gap: 4,
+                fontSize: 13, fontWeight: cell.hasReport ? 600 : 400,
+                transition: "background 0.12s, transform 0.1s",
+                position: "relative",
+              }}
+              onMouseEnter={(e) => { if (cell.hasReport) e.currentTarget.style.background = "#2a2a2e"; }}
+              onMouseLeave={(e) => { if (cell.hasReport) e.currentTarget.style.background = "#1c1c1f"; }}
+            >
+              <span>{cell.day}</span>
+              {cell.hasReport && (
+                <span style={{ width: 4, height: 4, borderRadius: "50%", background: ACCENT, display: "block" }} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 24, justifyContent: "center" }}>
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: ACCENT, display: "inline-block" }} />
+        <span style={{ fontSize: 12, color: "#52525b" }}>Report available — click to view</span>
+      </div>
+    </div>
   );
 }
+
+const navStyle: React.CSSProperties = {
+  width: 32, height: 32, borderRadius: 8, border: "1px solid #27272a",
+  background: "transparent", color: "#a1a1aa", cursor: "pointer",
+  display: "flex", alignItems: "center", justifyContent: "center",
+};
+
+// ── Task table ─────────────────────────────────────────────────────────────────
 
 type Task = { task: string; status: string };
 
 function parseContent(content: string): { tasks: Task[]; date: string } | null {
   try {
-    const raw = content.trim();
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(content.trim());
     if (parsed.tasks && Array.isArray(parsed.tasks)) return parsed;
     if (Array.isArray(parsed)) return { tasks: parsed, date: "" };
   } catch {}
@@ -92,9 +151,7 @@ function parseContent(content: string): { tasks: Task[]; date: string } | null {
 const COPY_SIGNATURE = "Sourav's daily task automation";
 
 function buildCopyText(weekday: string, date: string, tasks: Task[]): string {
-  const lines = tasks.map((t) =>
-    `${t.status === "Done" ? "✅" : "🔄"} ${t.task} — ${t.status}`
-  );
+  const lines = tasks.map((t) => `${t.status === "Done" ? "✅" : "🔄"} ${t.task} — ${t.status}`);
   return `📅 Daily Update — ${weekday}, ${date}\n\n${lines.join("\n")}\n\n— ${COPY_SIGNATURE}`;
 }
 
@@ -133,6 +190,8 @@ function TaskTable({ tasks }: { tasks: Task[] }) {
     </table>
   );
 }
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
 
 function ReportModal({ iso, content, onClose }: { iso: string; content: string; onClose: () => void }) {
   const { weekday, date } = formatDate(iso);
@@ -210,12 +269,7 @@ function ReportModal({ iso, content, onClose }: { iso: string; content: string; 
               onMouseLeave={(e) => { if (!copied) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#71717a"; e.currentTarget.style.borderColor = "#3f3f46"; } }}
             >
               {copied ? (
-                <>
-                  <svg width={13} height={13} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Copied!
-                </>
+                <><svg width={13} height={13} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>Copied!</>
               ) : (
                 <svg width={15} height={15} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <rect x="9" y="9" width="13" height="13" rx="2" strokeWidth={2} />
@@ -225,11 +279,7 @@ function ReportModal({ iso, content, onClose }: { iso: string; content: string; 
             </button>
             <button
               onClick={onClose}
-              style={{
-                width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center",
-                borderRadius: 8, border: "none", background: "transparent", color: "#71717a",
-                cursor: "pointer",
-              }}
+              style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, border: "none", background: "transparent", color: "#71717a", cursor: "pointer" }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "#27272a"; e.currentTarget.style.color = "#f4f4f5"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#71717a"; }}
             >
@@ -239,20 +289,17 @@ function ReportModal({ iso, content, onClose }: { iso: string; content: string; 
             </button>
           </div>
         </div>
-
         <div style={{ overflowY: "auto", padding: "20px 24px" }}>
-          {parsed ? (
-            <TaskTable tasks={parsed.tasks} />
-          ) : (
-            <div className="report-body">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
-            </div>
+          {parsed ? <TaskTable tasks={parsed.tasks} /> : (
+            <div className="report-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown></div>
           )}
         </div>
       </div>
     </div>
   );
 }
+
+// ── App ───────────────────────────────────────────────────────────────────────
 
 export default function ReportsApp() {
   const [dates, setDates] = useState<string[]>([]);
@@ -287,18 +334,10 @@ export default function ReportsApp() {
 
   return (
     <main style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      <header style={{
-        borderBottom: "1px solid #27272a", padding: "0 24px",
-        height: 56, display: "flex", alignItems: "center", gap: 12,
-        background: "#111113",
-      }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: 8, background: ACCENT,
-          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-        }}>
+      <header style={{ borderBottom: "1px solid #27272a", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 12, background: "#111113" }}>
+        <div style={{ width: 28, height: 28, borderRadius: 8, background: ACCENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <svg width={14} height={14} fill="none" stroke="#09090b" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
-              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
         </div>
         <span style={{ fontSize: 14, fontWeight: 600, color: "#f4f4f5" }}>Daily Reports</span>
@@ -309,47 +348,20 @@ export default function ReportsApp() {
         )}
       </header>
 
-      <div style={{ maxWidth: 560, margin: "0 auto", padding: "32px 16px" }}>
-        {loading ? (
-          <div style={{ display: "flex", justifyContent: "center", padding: "80px 0" }}>
-            <div className="spinner" />
-          </div>
-        ) : dates.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "80px 0" }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: 14, background: "#1c1c1f",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              margin: "0 auto 16px",
-            }}>
-              <svg width={22} height={22} fill="none" stroke="#52525b" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-            <p style={{ color: "#71717a", fontSize: 14 }}>No reports yet.</p>
-            <p style={{ color: "#52525b", fontSize: 12, marginTop: 4 }}>
-              Run <code style={{ fontFamily: "monospace", color: "#71717a" }}>python3 reporter.py</code> to generate your first one.
-            </p>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {dates.map((iso) => (
-              <ReportCard key={iso} iso={iso} onOpen={openReport} />
-            ))}
-          </div>
-        )}
-      </div>
+      {loading ? (
+        <div style={{ display: "flex", justifyContent: "center", padding: "80px 0" }}>
+          <div className="spinner" />
+        </div>
+      ) : (
+        <CalendarView dates={dates} onOpen={openReport} />
+      )}
 
       {activeDate && !loadingReport && (
         <ReportModal iso={activeDate} content={activeContent} onClose={closeModal} />
       )}
 
       {loadingReport && (
-        <div style={{
-          position: "fixed", inset: 0, zIndex: 50,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          background: "rgba(0,0,0,0.6)",
-        }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)" }}>
           <div className="spinner" />
         </div>
       )}
