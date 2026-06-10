@@ -238,21 +238,52 @@ def generate(day: date):
         print(content)
 
 
+def sync_all():
+    """Push every local report file to the web viewer (Vercel Blob)."""
+    files = sorted(REPORTS_DIR.glob("*.md"))
+    if not files:
+        print("No local reports found.")
+        return
+    print(f"Syncing {len(files)} report(s) to web viewer...")
+    for f in files:
+        day_str = f.stem  # e.g. 2026-06-09
+        content = f.read_text().strip()
+        url = os.environ.get("REPORTS_API_URL", "").rstrip("/")
+        secret = os.environ.get("REPORTS_API_SECRET", "")
+        if not url or not secret:
+            print("  REPORTS_API_URL / REPORTS_API_SECRET not set — skipping web sync")
+            return
+        body = json.dumps({"date": day_str, "report": content}).encode()
+        req = urllib.request.Request(
+            f"{url}/api/reports", data=body,
+            headers={"Content-Type": "application/json", "x-reports-secret": secret},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                print(f"  ✅  {day_str}  ({resp.status})")
+        except Exception as e:
+            print(f"  ❌  {day_str}  {e}")
+
+
 def main():
     p = argparse.ArgumentParser(description="Generate daily activity report")
     g = p.add_mutually_exclusive_group()
     g.add_argument("--yesterday", action="store_true", help="Report for yesterday")
     g.add_argument("--date", metavar="YYYY-MM-DD", help="Specific date")
+    g.add_argument("--sync-all", action="store_true", help="Push all local reports to web viewer")
     args = p.parse_args()
 
-    if args.yesterday:
+    if args.sync_all:
+        sync_all()
+    elif args.yesterday:
         day = date.today() - timedelta(days=1)
+        generate(day)
     elif args.date:
         day = date.fromisoformat(args.date)
+        generate(day)
     else:
         day = date.today()
-
-    generate(day)
+        generate(day)
 
 
 if __name__ == "__main__":
