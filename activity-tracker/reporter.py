@@ -132,7 +132,40 @@ Example output:
     raise ValueError(f"Unexpected response shape: {json.dumps(data)[:300]}")
 
 
-# ── Web sync ───────────────────────────────────────────────────────────────────
+# ── GitHub sync ────────────────────────────────────────────────────────────────
+
+def sync_to_github(day: date, content: str):
+    """Push report JSON to srv09/daily-tracker/reports/YYYY-MM-DD.json via gh CLI."""
+    import subprocess, base64 as b64
+
+    repo = "srv09/daily-tracker"
+    file_path = f"reports/{day.isoformat()}.json"
+    encoded = b64.b64encode(content.encode()).decode()
+
+    # Get SHA if file already exists (required for updates)
+    sha_result = subprocess.run(
+        ["gh", "api", f"repos/{repo}/contents/{file_path}", "-q", ".sha"],
+        capture_output=True, text=True,
+    )
+    sha = sha_result.stdout.strip() if sha_result.returncode == 0 else None
+
+    cmd = [
+        "gh", "api", f"repos/{repo}/contents/{file_path}",
+        "-X", "PUT",
+        "-f", f"message=report: {day.isoformat()}",
+        "-f", f"content={encoded}",
+    ]
+    if sha:
+        cmd += ["-f", f"sha={sha}"]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode == 0:
+        print(f"  Pushed to GitHub → {file_path}")
+    else:
+        print(f"  GitHub push failed: {result.stderr.strip()}")
+
+
+# ── Web sync (legacy — kept for optional Vercel API sync) ─────────────────────
 
 def sync_to_web(day: date, markdown: str):
     url = os.environ.get("REPORTS_API_URL", "").rstrip("/")
