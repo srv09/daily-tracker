@@ -83,21 +83,26 @@ def call_seed(timeline: str, day: date) -> str:
 Output ONLY a valid JSON array — no markdown, no explanation, nothing else.
 
 Each item has:
-- "task": what was worked on (specific name from window titles where possible)
-- "status": "Done" if the task seems completed, "In-progress" if it's an ongoing project
+- "task": specific, descriptive task name using exact names from window titles (project names, email subjects, website names, document names)
+- "status": "Done" if completed this session, "In-progress" if ongoing
 
 Rules:
-- Group related work (multiple windows/tabs for the same project = one item)
-- Focus on WHAT was done, not which app was used
-- Past tense task names: "API testing and validation", "Revenue tracking", "Team sync"
+- Be GRANULAR — break broad categories into specific tasks (e.g. don't just say "Email correspondence", say "Replied to GPT Image 2 API partnership inquiry" or "Resolved client billing issue on Appy Pie")
+- Use specific names from window titles wherever visible
+- Don't merge unrelated tasks just because they're in the same app
+- Each distinct topic, project, or person = separate task
 - Skip idle time, lock screen, trivial Finder browsing
-- 3 to 10 items maximum
+- 8 to 15 items (more is better — capture everything meaningful)
+- Past tense, action-oriented: "Reviewed...", "Resolved...", "Set up...", "Discussed...", "Tested..."
 
 Example output:
 [
-  {{"task": "API testing and validation", "status": "Done"}},
-  {{"task": "Playground stability improvements", "status": "In-progress"}},
-  {{"task": "Team sync", "status": "Done"}}
+  {{"task": "Reviewed GPT Image 2 low-cost API partnership proposal", "status": "Done"}},
+  {{"task": "Tested Pixazo AI Playground image generation flow", "status": "In-progress"}},
+  {{"task": "Resolved client query via Appy Pie LLP email", "status": "Done"}},
+  {{"task": "Team standup sync on MSTeams", "status": "Done"}},
+  {{"task": "Reviewed Pixazo trial user list on Brevo", "status": "Done"}},
+  {{"task": "Checked Pixazo Data Hub analytics", "status": "Done"}}
 ]"""
 
     body = json.dumps({
